@@ -249,20 +249,18 @@ public class BgReading extends Model implements ShareUploadableBg {
     }
 
     public String displayValue(Context context) {
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-        String unit = prefs.getString("units", "mgdl");
-        DecimalFormat df = new DecimalFormat("#");
-        df.setMaximumFractionDigits(0);
-
-        if (calculated_value >= 400) {
+        final String unit = Pref.getString("units", "mgdl");
+        final DecimalFormat df = new DecimalFormat("#");
+        final double this_value = getDg_mgdl();
+        if (this_value >= 400) {
             return "HIGH";
-        } else if (calculated_value >= 40) {
-            if (unit.compareTo("mgdl") == 0) {
+        } else if (this_value >= 40) {
+            if (unit.equals("mgdl")) {
                 df.setMaximumFractionDigits(0);
-                return df.format(calculated_value);
+                return df.format(this_value);
             } else {
                 df.setMaximumFractionDigits(1);
-                return df.format(calculated_value_mmol());
+                return df.format(mmolConvert(this_value));
             }
         } else {
             return "LOW";
@@ -958,6 +956,40 @@ public class BgReading extends Model implements ShareUploadableBg {
                 .execute();
     }
 
+    public static List<BgReading> latestForSensorAsc(int number, long startTime, long endTime, boolean follower) {
+        if (follower) {
+            return new Select()
+                    .from(BgReading.class)
+                    .where("timestamp >= ?", Math.max(startTime, 0))
+                    .where("timestamp <= ?", endTime)
+                    .where("calculated_value != 0")
+                    .where("raw_data != 0")
+                    .orderBy("timestamp asc")
+                    .limit(number)
+                    .execute();
+        } else {
+            final Sensor sensor = Sensor.currentSensor();
+            if (sensor == null) {
+                return null;
+            }
+            return new Select()
+                    .from(BgReading.class)
+                    .where("Sensor = ? ", sensor.getId())
+                    .where("timestamp >= ?", Math.max(startTime, 0))
+                    .where("timestamp <= ?", endTime)
+                    .where("calculated_value != 0")
+                    .where("raw_data != 0")
+                    .orderBy("timestamp asc")
+                    .limit(number)
+                    .execute();
+        }
+    }
+
+    public static List<BgReading> latestForSensorAsc(int number, long startTime, long endTime) {
+        return latestForSensorAsc(number, startTime, endTime, false);
+    }
+
+
     public static List<BgReading> latestForGraphAsc(int number, long startTime) {//KS
         return latestForGraphAsc(number, startTime, Long.MAX_VALUE);
     }
@@ -1405,7 +1437,11 @@ public class BgReading extends Model implements ShareUploadableBg {
             jsonObject.put("filtered_data", filtered_data);
             jsonObject.put("raw_calculated", raw_calculated);
             jsonObject.put("raw_data", raw_data);
-            jsonObject.put("calculated_value_slope", calculated_value_slope);
+            try {
+                jsonObject.put("calculated_value_slope", calculated_value_slope);
+            } catch (JSONException e) {
+                jsonObject.put("hide_slope", true); // calculated value slope is NaN - hide slope should already be true locally too
+            }
             if (sendCalibration) {
                 jsonObject.put("calibration_uuid", calibration_uuid);
             }
