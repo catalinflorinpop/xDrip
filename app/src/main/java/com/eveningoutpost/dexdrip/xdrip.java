@@ -7,6 +7,8 @@ import android.content.ContextWrapper;
 import android.content.res.Configuration;
 import android.os.Build;
 import android.preference.PreferenceManager;
+import android.support.annotation.StringRes;
+import android.support.multidex.MultiDexApplication;
 import android.util.Log;
 
 import com.crashlytics.android.Crashlytics;
@@ -18,13 +20,19 @@ import com.eveningoutpost.dexdrip.Services.ActivityRecognizedService;
 import com.eveningoutpost.dexdrip.Services.BluetoothGlucoseMeter;
 import com.eveningoutpost.dexdrip.Services.MissedReadingService;
 import com.eveningoutpost.dexdrip.Services.PlusSyncService;
+import com.eveningoutpost.dexdrip.Services.SyncService;
 import com.eveningoutpost.dexdrip.UtilityModels.CollectionServiceStarter;
 import com.eveningoutpost.dexdrip.UtilityModels.IdempotentMigrations;
 import com.eveningoutpost.dexdrip.UtilityModels.PlusAsyncExecutor;
 import com.eveningoutpost.dexdrip.UtilityModels.Pref;
 import com.eveningoutpost.dexdrip.UtilityModels.VersionTracker;
 import com.eveningoutpost.dexdrip.calibrations.PluggableCalibration;
+import com.eveningoutpost.dexdrip.utils.jobs.DailyJob;
+import com.eveningoutpost.dexdrip.utils.jobs.XDripJobCreator;
+import com.eveningoutpost.dexdrip.watch.lefun.LeFunEntry;
+import com.eveningoutpost.dexdrip.watch.thinjam.BlueJayEntry;
 import com.eveningoutpost.dexdrip.webservices.XdripWebService;
+import com.evernote.android.job.JobManager;
 
 import java.util.Locale;
 
@@ -36,7 +44,7 @@ import io.fabric.sdk.android.Fabric;
  * Created by Emma Black on 3/21/15.
  */
 
-public class xdrip extends Application {
+public class xdrip extends MultiDexApplication {
 
     private static final String TAG = "xdrip.java";
     @SuppressLint("StaticFieldLeak")
@@ -72,10 +80,13 @@ public class xdrip extends Application {
 
         checkForcedEnglish(xdrip.context);
 
-
         JoH.ratelimit("policy-never", 3600); // don't on first load
         new IdempotentMigrations(getApplicationContext()).performAll();
 
+
+        JobManager.create(this).addJobCreator(new XDripJobCreator());
+        DailyJob.schedule();
+        //SyncService.startSyncServiceSoon();
 
         if (!isRunningTest()) {
             MissedReadingService.delayedLaunch();
@@ -88,6 +99,8 @@ public class xdrip extends Application {
                 ActivityRecognizedService.startActivityRecogniser(getApplicationContext());
             }
             BluetoothGlucoseMeter.startIfEnabled();
+            LeFunEntry.initialStartIfEnabled();
+            BlueJayEntry.initialStartIfEnabled();
             XdripWebService.immortality();
             VersionTracker.updateDevice();
 
@@ -221,11 +234,11 @@ public class xdrip extends Application {
     }
 
 
-    public static String gs(int id) {
+    public static String gs(@StringRes final int id) {
         return getAppContext().getString(id);
     }
 
-    public static String gs(int id, String... args) {
+    public static String gs(@StringRes final int id, String... args) {
         return getAppContext().getString(id, (Object[]) args);
     }
 
